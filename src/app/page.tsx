@@ -191,68 +191,39 @@ export default function Home() {
     return sim;
   };
 
-  const findDuplicates = async (clsFiles: ClassData[]) => {
-    const result: ClassData[] = [];
-    clsFiles.forEach((classData: ClassData) => {
-      const files = classData.files;
-      const duplicates: FileInfo[][] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        let dupeFound = false;
-        for (let j = 0; j < duplicates.length; j++) {
-          const dupes = duplicates[j];
-          for (let k = 0; k < dupes.length; k++) {
-            const dupe = dupes[k];
-            const sim = cosineSim(
-              file.embedding as number[],
-              dupe.embedding as number[]
-            );
-            if (sim > 0.9) {
-              dupes.push(file);
-              files.splice(i, 1);
-              dupeFound = true;
-              break;
-            }
-          }
-          if (dupeFound) {
-            break;
-          }
-        }
-        if (dupeFound) {
-          i--;
-          continue;
-        }
-        for (let j = i + 1; j < files.length; j++) {
-          const file2 = files[j];
-          const sim = cosineSim(
-            file.embedding as number[],
-            file2.embedding as number[]
-          );
-          if (sim > 0.9) {
-            const dupe: FileInfo[] = [file, file2];
-            duplicates.push(dupe);
-            files.splice(j, 1);
-            files.splice(i, 1);
-            i--;
-            break;
-          }
+const findDuplicates = async (clsFiles: ClassData[]) => {
+  const result: ClassData[] = [];
+  
+  clsFiles.forEach((classData: ClassData) => {
+    const files = classData.files;
+    const toDelete = new Set(); // Keep track of files to delete
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      for (let j = i + 1; j < files.length; j++) {
+        const file2 = files[j];
+        const sim = cosineSim(file.embedding as number[], file2.embedding as number[]);
+        
+        if (sim > 0.9) { // If similarity is above the threshold
+          toDelete.add(file2.hash); // Mark the second file for deletion
+          files.splice(j, 1); // Remove the second file from the array
+          j--; // Adjust index due to removal
         }
       }
-      classData.duplicates = [];
-      for (let i = 0; i < duplicates.length; i++) {
-        const dupes = duplicates[i];
-        if (dupes.length > 1) {
-          classData.duplicates.push({
-            name: `Possible duplicate ${i}`,
-            files: dupes,
-            duplicates: [],
-          });
-        }
-      }
-      result.push(classData);
-    });
-    setClassFiles([...result]);
-  };
+    }
+
+    // Update files to exclude deleted ones
+    classData.files = files.filter(file => !toDelete.has(file.hash));
+    result.push(classData);
+  });
+
+  // Update the state with the modified class files
+  setClassFiles([...result]);
+  
+  // Remove deleted files from unsorted files
+  setUnsortedFiles(prevFiles => prevFiles.filter(file => !toDelete.has(file.hash)));
+};
 
   const markDeleted = (hash: string) => {
     const clsFiles = [...classFiles];
